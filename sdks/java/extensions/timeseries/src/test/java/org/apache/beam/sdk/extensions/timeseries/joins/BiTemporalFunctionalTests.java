@@ -19,6 +19,8 @@ package org.apache.beam.sdk.extensions.timeseries.joins;
 
 import com.google.common.collect.ImmutableList;
 import java.io.Serializable;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import org.apache.beam.sdk.coders.AvroCoder;
 import org.apache.beam.sdk.extensions.timeseries.joins.BiTemporalTestUtils.QuoteData;
@@ -32,15 +34,29 @@ import org.joda.time.Duration;
 import org.joda.time.Instant;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
 
 /** */
+@RunWith(Parameterized.class)
 public class BiTemporalFunctionalTests implements Serializable {
+
+  @Parameters
+  public static Collection<Void> parameters() {
+    // just to run the tests multiple times
+    return Arrays.asList(new Void[20]);
+  }
 
   static TupleTag<TradeData> tradeTag = new TupleTag() {};
   static TupleTag<QuoteData> quoteTag = new TupleTag() {};
   static final Duration WINDOW_DURATION = Duration.standardDays(30);
 
   @Rule public transient TestPipeline p = TestPipeline.create();
+
+  public BiTemporalFunctionalTests(Void ignore) {
+
+  }
 
   // We will start our timer at 1 sec from the fixed upper boundary of our minute window
   Instant now = Instant.parse("2000-01-01T00:00:00Z");
@@ -166,4 +182,5 @@ public class BiTemporalFunctionalTests implements Serializable {
 
     p.run();
   }
+
 }
