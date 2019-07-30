@@ -492,6 +492,10 @@ public class WatermarkManager<ExecutableT, CollectionT> {
           .add("currentWatermark", currentWatermark)
           .toString();
     }
+
+    private boolean hasPending() {
+      return !pendingElements.isEmpty();
+    }
   }
 
   /**
@@ -788,6 +792,10 @@ public class WatermarkManager<ExecutableT, CollectionT> {
       return MoreObjects.toStringHelper(SynchronizedProcessingTimeInputWatermark.class)
           .add("earliestHold", earliestHold)
           .toString();
+    }
+
+    private boolean hasPending() {
+      return !pendingBundles.isEmpty();
     }
   }
 
@@ -1272,8 +1280,13 @@ public class WatermarkManager<ExecutableT, CollectionT> {
 
   private Set<ExecutableT> refreshAllOf(Set<ExecutableT> toRefresh) {
     Set<ExecutableT> newRefreshes = new HashSet<>();
+    long numExecutablesRefreshable =
+        toRefresh.stream()
+            .map(transformToWatermarks::get)
+            .filter(TransformWatermarks::hasPendingWatermarkRefresh)
+            .count();
     for (ExecutableT executable : toRefresh) {
-      newRefreshes.addAll(refreshWatermarks(executable, false));
+      newRefreshes.addAll(refreshWatermarks(executable, numExecutablesRefreshable == 1));
     }
     return newRefreshes;
   }
@@ -1533,6 +1546,10 @@ public class WatermarkManager<ExecutableT, CollectionT> {
     private void addPending(Bundle<?, ?> bundle) {
       inputWatermark.addPending(bundle);
       synchronizedProcessingInputWatermark.addPending(bundle);
+    }
+
+    private boolean hasPendingWatermarkRefresh() {
+      return inputWatermark.hasPending() || synchronizedProcessingInputWatermark.hasPending();
     }
 
     private Collection<FiredTimers<ExecutableT>> extractFiredTimers() {
