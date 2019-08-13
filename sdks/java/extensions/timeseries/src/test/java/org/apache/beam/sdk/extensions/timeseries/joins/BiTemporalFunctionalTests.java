@@ -56,9 +56,7 @@ public class BiTemporalFunctionalTests implements Serializable {
 
   @Rule public transient TestPipeline p = TestPipeline.create();
 
-  public BiTemporalFunctionalTests(Void ignore) {
-
-  }
+  public BiTemporalFunctionalTests(Void ignore) {}
 
   // We will start our timer at 1 sec from the fixed upper boundary of our minute window
   Instant now = Instant.parse("2000-01-01T00:00:00Z");
