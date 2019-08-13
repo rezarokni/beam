@@ -21,6 +21,8 @@ import com.google.common.collect.ImmutableList;
 import java.io.Serializable;
 import java.util.List;
 import org.apache.beam.sdk.coders.AvroCoder;
+import org.apache.beam.sdk.coders.KvCoder;
+import org.apache.beam.sdk.coders.StringUtf8Coder;
 import org.apache.beam.sdk.extensions.timeseries.joins.BiTemporalTestUtils.QuoteData;
 import org.apache.beam.sdk.extensions.timeseries.joins.BiTemporalTestUtils.TradeData;
 import org.apache.beam.sdk.testing.PAssert;
@@ -58,12 +60,12 @@ public class BiTemporalFunctionalTests implements Serializable {
 
     List<TimestampedValue<TradeData>> tradeStream = ImmutableList.of(tradeStream_BeforeAnyValues);
 
-    List<TimestampedValue<QuoteData>> rightStream = BiTemporalTestUtils.createQuotesList(now);
+    List<TimestampedValue<KV<String,QuoteData>>> rightStream = BiTemporalTestUtils.createQuotesList(now,"FX_1", "Quote");
+
 
     PCollection<KV<String, QuoteData>> quotes =
         p.apply("Create Quotes", Create.timestamped(rightStream))
-            .setCoder(AvroCoder.of(QuoteData.class))
-            .apply("Quote Key", WithKeys.of("FX_1"));
+            .setCoder(KvCoder.of(StringUtf8Coder.of(),AvroCoder.of(QuoteData.class)));
 
     PCollection<KV<String, TradeData>> trades =
         p.apply("Create Trades", Create.timestamped(tradeStream))
@@ -104,12 +106,12 @@ public class BiTemporalFunctionalTests implements Serializable {
     List<TimestampedValue<TradeData>> tradeStream =
         ImmutableList.of(tradeStream_MiddleOfValues_Exact, tradeStream_MiddleOfValues_MidPoint);
 
-    List<TimestampedValue<QuoteData>> rightStream = BiTemporalTestUtils.createQuotesList(now);
+    List<TimestampedValue<KV<String,QuoteData>>> rightStream = BiTemporalTestUtils.createQuotesList(now,"FX_1","Quote");
+
 
     PCollection<KV<String, QuoteData>> quotes =
         p.apply("Create Quotes", Create.timestamped(rightStream))
-            .setCoder(AvroCoder.of(QuoteData.class))
-            .apply("Quote Key", WithKeys.of("FX_1"));
+            .setCoder(KvCoder.of(StringUtf8Coder.of(),AvroCoder.of(QuoteData.class)));
 
     PCollection<KV<String, TradeData>> trades =
         p.apply("Create Trades", Create.timestamped(tradeStream))
@@ -141,12 +143,12 @@ public class BiTemporalFunctionalTests implements Serializable {
 
     List<TimestampedValue<TradeData>> tradeStream = ImmutableList.of(tradeStream_AfterAllValues);
 
-    List<TimestampedValue<QuoteData>> rightStream = BiTemporalTestUtils.createQuotesList(now);
+    List<TimestampedValue<KV<String,QuoteData>>> rightStream = BiTemporalTestUtils.createQuotesList(now, "FX_1","Quote");
+
 
     PCollection<KV<String, QuoteData>> quotes =
         p.apply("Create Quotes", Create.timestamped(rightStream))
-            .setCoder(AvroCoder.of(QuoteData.class))
-            .apply("Quote Key", WithKeys.of("FX_1"));
+            .setCoder(KvCoder.of(StringUtf8Coder.of(),AvroCoder.of(QuoteData.class)));
 
     PCollection<KV<String, TradeData>> trades =
         p.apply("Create Trades", Create.timestamped(tradeStream))
@@ -163,6 +165,73 @@ public class BiTemporalFunctionalTests implements Serializable {
                 tradeTag, quoteTag, WINDOW_DURATION));
 
     PAssert.that(stream.apply(new BiTemporalTestUtils.BiTemporalTest())).containsInAnyOrder(1);
+
+    p.run();
+  }
+
+  @Test
+  public void testMultipleKeysMatch() {
+
+    TimestampedValue<KV<String,TradeData>> fx1_tradeStream_MiddleOfValues_Exact =
+        TimestampedValue.of(KV.of("FX_1",
+            BiTemporalTestUtils.createTradeData(
+                "FX_1", "Trade@00:15:00.000", now.plus(Duration.standardMinutes(15)))),
+            now.plus(Duration.standardMinutes(15)));
+
+    TimestampedValue<KV<String,TradeData>> fx1_tradeStream_MiddleOfValues_MidPoint =
+        TimestampedValue.of(KV.of("FX_1",
+            BiTemporalTestUtils.createTradeData(
+                "FX_1",
+                "Trade@00:15:00.500",
+                now.plus(Duration.standardMinutes(15)).plus(Duration.millis(500)))),
+            now.plus(Duration.standardMinutes(15)).plus(Duration.millis(500)));
+
+    TimestampedValue<KV<String,TradeData>> fx2_tradeStream_MiddleOfValues_Exact =
+        TimestampedValue.of(KV.of("FX_2",
+            BiTemporalTestUtils.createTradeData(
+                "FX_2", "Trade@00:15:00.000", now.plus(Duration.standardMinutes(15)))),
+            now.plus(Duration.standardMinutes(15)));
+
+    TimestampedValue<KV<String,TradeData>> fx2_tradeStream_MiddleOfValues_MidPoint =
+        TimestampedValue.of(KV.of("FX_2",
+            BiTemporalTestUtils.createTradeData(
+                "FX_2",
+                "Trade@00:15:00.500",
+                now.plus(Duration.standardMinutes(15)).plus(Duration.millis(500)))),
+            now.plus(Duration.standardMinutes(15)).plus(Duration.millis(500)));
+
+
+    List<TimestampedValue<KV<String,TradeData>>> tradeStream =
+        ImmutableList.of(
+            fx1_tradeStream_MiddleOfValues_Exact,
+            fx1_tradeStream_MiddleOfValues_MidPoint,
+            fx2_tradeStream_MiddleOfValues_Exact,
+            fx2_tradeStream_MiddleOfValues_MidPoint);
+
+    // Add Key FX_1
+    List<TimestampedValue<KV<String,QuoteData>>> rightStream = BiTemporalTestUtils.createQuotesList(now,"FX_1", "Quote");
+
+    //Add key FX_2
+    rightStream.addAll(BiTemporalTestUtils.createQuotesList(now,"FX_2","Quote"));
+
+    PCollection<KV<String, QuoteData>> quotes =
+        p.apply("Create Quotes", Create.timestamped(rightStream))
+            .setCoder(KvCoder.of(StringUtf8Coder.of(),AvroCoder.of(QuoteData.class)));
+
+    PCollection<KV<String, TradeData>> trades =
+        p.apply("Create Trades", Create.timestamped(tradeStream))
+            .setCoder(KvCoder.of(StringUtf8Coder.of(), AvroCoder.of(TradeData.class)));
+
+    KeyedPCollectionTuple<String> kct =
+        KeyedPCollectionTuple.of(tradeTag, trades).and(quoteTag, quotes);
+
+    PCollection<BiTemporalJoinResult<String, TradeData, QuoteData>> stream =
+        kct.apply(
+            "BiTemporalStreams",
+            BiTemporalStreams.<String, TradeData, QuoteData>join(
+                tradeTag, quoteTag, WINDOW_DURATION));
+
+    PAssert.that(stream.apply(new BiTemporalTestUtils.BiTemporalTest())).containsInAnyOrder(4);
 
     p.run();
   }

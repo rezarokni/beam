@@ -25,6 +25,7 @@ import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.PTransform;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.transforms.Sum;
+import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.TimestampedValue;
 import org.joda.time.Duration;
@@ -58,15 +59,15 @@ public class BiTemporalTestUtils {
     }
   }
 
-  public static List<TimestampedValue<QuoteData>> createQuotesList(Instant now) {
+  public static List<TimestampedValue<KV<String,QuoteData>>> createQuotesList(Instant now, String key, String id) {
 
-    List<TimestampedValue<QuoteData>> rightStream = new ArrayList<>();
+    List<TimestampedValue<KV<String,QuoteData>>> rightStream = new ArrayList<>();
     // Create a id every sec for 30 mins
     for (int i = 0; i < 1800; ++i) {
 
       Instant time = now.plus(Duration.standardSeconds(i));
       rightStream.add(
-          TimestampedValue.of(BiTemporalTestUtils.createQuoteData("Quote", "FX_1", time), time));
+          TimestampedValue.of(BiTemporalTestUtils.createKVQuoteData(key, id, time), time));
     }
 
     return rightStream;
@@ -121,5 +122,9 @@ public class BiTemporalTestUtils {
 
   public static QuoteData createQuoteData(String key, String id, Instant time) {
     return new QuoteData("Quote", key, id, time.getMillis());
+  }
+
+  public static KV<String,QuoteData> createKVQuoteData(String key, String id, Instant time) {
+    return KV.of(key,new QuoteData("Quote", key, id, time.getMillis()));
   }
 }
