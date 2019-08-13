@@ -226,7 +226,11 @@ class EvaluationContext {
   private void fireAvailableCallbacks(AppliedPTransform<?, ?, ?> producingTransform) {
     TransformWatermarks watermarks = watermarkManager.getWatermarks(producingTransform);
     Instant outputWatermark = watermarks.getOutputWatermark();
-    callbackExecutor.fireForWatermark(producingTransform, outputWatermark);
+    try {
+      callbackExecutor.fireForWatermark(producingTransform, outputWatermark);
+    } catch (InterruptedException ex) {
+      Thread.currentThread().interrupt();
+    }
   }
 
   /** Create a {@link UncommittedBundle} for use by a source. */
@@ -369,7 +373,7 @@ class EvaluationContext {
    * <p>This is a destructive operation. Timers will only appear in the result of this method once
    * for each time they are set.
    */
-  public Collection<FiredTimers<AppliedPTransform<?, ?, ?>>> extractFiredTimers() {
+  Collection<FiredTimers<AppliedPTransform<?, ?, ?>>> extractFiredTimers() {
     forceRefresh();
     return watermarkManager.extractFiredTimers();
   }
