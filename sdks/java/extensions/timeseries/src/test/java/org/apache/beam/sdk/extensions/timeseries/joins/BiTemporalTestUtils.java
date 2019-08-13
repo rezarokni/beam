@@ -59,9 +59,10 @@ public class BiTemporalTestUtils {
     }
   }
 
-  public static List<TimestampedValue<KV<String,QuoteData>>> createQuotesList(Instant now, String key, String id) {
+  public static List<TimestampedValue<KV<String, QuoteData>>> createQuotesList(
+      Instant now, String key, String id) {
 
-    List<TimestampedValue<KV<String,QuoteData>>> rightStream = new ArrayList<>();
+    List<TimestampedValue<KV<String, QuoteData>>> rightStream = new ArrayList<>();
     // Create a id every sec for 30 mins
     for (int i = 0; i < 1800; ++i) {
 
@@ -124,7 +125,7 @@ public class BiTemporalTestUtils {
     return new QuoteData("Quote", key, id, time.getMillis());
   }
 
-  public static KV<String,QuoteData> createKVQuoteData(String key, String id, Instant time) {
-    return KV.of(key,new QuoteData("Quote", key, id, time.getMillis()));
+  public static KV<String, QuoteData> createKVQuoteData(String key, String id, Instant time) {
+    return KV.of(key, new QuoteData("Quote", key, id, time.getMillis()));
   }
 }
