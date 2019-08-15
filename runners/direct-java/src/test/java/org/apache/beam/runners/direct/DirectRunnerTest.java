@@ -45,6 +45,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 import javax.annotation.Nullable;
 import org.apache.beam.runners.direct.DirectRunner.DirectPipelineResult;
 import org.apache.beam.sdk.Pipeline;
@@ -54,10 +56,12 @@ import org.apache.beam.sdk.PipelineRunner;
 import org.apache.beam.sdk.coders.AtomicCoder;
 import org.apache.beam.sdk.coders.Coder;
 import org.apache.beam.sdk.coders.CoderException;
+import org.apache.beam.sdk.coders.KvCoder;
 import org.apache.beam.sdk.coders.ListCoder;
 import org.apache.beam.sdk.coders.SerializableCoder;
 import org.apache.beam.sdk.coders.VarIntCoder;
 import org.apache.beam.sdk.coders.VarLongCoder;
+import org.apache.beam.sdk.coders.VoidCoder;
 import org.apache.beam.sdk.io.BoundedSource;
 import org.apache.beam.sdk.io.CountingSource;
 import org.apache.beam.sdk.io.GenerateSequence;
@@ -66,8 +70,16 @@ import org.apache.beam.sdk.io.UnboundedSource;
 import org.apache.beam.sdk.options.Default;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
+import org.apache.beam.sdk.state.StateSpec;
+import org.apache.beam.sdk.state.StateSpecs;
+import org.apache.beam.sdk.state.TimeDomain;
+import org.apache.beam.sdk.state.Timer;
+import org.apache.beam.sdk.state.TimerSpec;
+import org.apache.beam.sdk.state.TimerSpecs;
+import org.apache.beam.sdk.state.ValueState;
 import org.apache.beam.sdk.testing.PAssert;
 import org.apache.beam.sdk.testing.TestPipeline;
+import org.apache.beam.sdk.testing.TestStream;
 import org.apache.beam.sdk.transforms.Count;
 import org.apache.beam.sdk.transforms.Create;
 import org.apache.beam.sdk.transforms.DoFn;
@@ -673,6 +685,21 @@ public class DirectRunnerTest implements Serializable {
     run.waitUntilFinish();
   }
 
+  @Test(timeout = 10000)
+  public void testTwoTimersSettingEachOther() {
+    Pipeline pipeline = getPipeline();
+    Instant now = new Instant(1500000000000L);
+    Instant end = now.plus(100);
+    PCollection<String> result = pipeline.apply(new TwoTimerTest(now, end));
+    List<String> expected =
+        LongStream.rangeClosed(0, 100)
+            .mapToObj(e -> (Long) e)
+            .flatMap(e -> Arrays.asList("t1:" + e + ":" + e, "t2:" + e + ":" + e).stream())
+            .collect(Collectors.toList());
+    PAssert.that(result).containsInAnyOrder(expected);
+    pipeline.run();
+  }
+
   private PTransform<PBegin, PDone> outputStartTo(StaticQueue<Integer> queue) {
     return new PTransform<PBegin, PDone>() {
       @Override
@@ -689,6 +716,94 @@ public class DirectRunnerTest implements Serializable {
         return PDone.in(input.getPipeline());
       }
     };
+  }
+
+  private static class TwoTimerTest extends PTransform<PBegin, PCollection<String>> {
+
+    private final Instant start;
+    private final Instant end;
+
+    public TwoTimerTest(Instant start, Instant end) {
+      this.start = start;
+      this.end = end;
+    }
+
+    @Override
+    public PCollection<String> expand(PBegin input) {
+
+      final String timerName1 = "t1";
+      final String timerName2 = "t2";
+      final String countStateName = "count";
+      return input
+          .apply(
+              TestStream.create(KvCoder.of(VoidCoder.of(), VoidCoder.of()))
+                  .addElements(KV.of(null, null))
+                  .advanceWatermarkToInfinity())
+          .apply(
+              ParDo.of(
+                  new DoFn<KV<Void, Void>, String>() {
+
+                    @TimerId(timerName1)
+                    final TimerSpec timerSpec1 = TimerSpecs.timer(TimeDomain.EVENT_TIME);
+
+                    @TimerId(timerName2)
+                    final TimerSpec timerSpec2 = TimerSpecs.timer(TimeDomain.EVENT_TIME);
+
+                    @StateId(countStateName)
+                    final StateSpec<ValueState<Integer>> countStateSpec = StateSpecs.value();
+
+                    @ProcessElement
+                    public void processElement(
+                        ProcessContext context,
+                        @TimerId(timerName1) Timer t1,
+                        @TimerId(timerName2) Timer t2,
+                        @StateId(countStateName) ValueState<Integer> state) {
+
+                      state.write(0);
+                      t1.set(start);
+                      // set the t2 timer after end, so that we test that
+                      // timers are correctly ordered in this case
+                      t2.set(end.plus(1));
+                    }
+
+                    @OnTimer(timerName1)
+                    public void onTimer1(
+                        OnTimerContext context,
+                        @TimerId(timerName2) Timer t1,
+                        @TimerId(timerName2) Timer t2,
+                        @StateId(countStateName) ValueState<Integer> state) {
+
+                      Integer current = state.read();
+                      t2.set(context.timestamp());
+
+                      context.output(
+                          "t1:"
+                              + current
+                              + ":"
+                              + context.timestamp().minus(start.getMillis()).getMillis());
+                    }
+
+                    @OnTimer(timerName2)
+                    public void onTimer2(
+                        OnTimerContext context,
+                        @TimerId(timerName1) Timer t1,
+                        @TimerId(timerName2) Timer t2,
+                        @StateId(countStateName) ValueState<Integer> state) {
+                      Integer current = state.read();
+                      if (context.timestamp().isBefore(end)) {
+                        state.write(current + 1);
+                        t1.set(context.timestamp().plus(1));
+                      } else {
+                        state.write(-1);
+                      }
+                      context.output(
+                          "t2:"
+                              + current
+                              + ":"
+                              + context.timestamp().minus(start.getMillis()).getMillis());
+                    }
+                  }));
+    }
   }
 
   /**

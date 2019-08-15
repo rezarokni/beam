@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import javax.annotation.Nullable;
 import org.apache.beam.runners.core.KeyedWorkItem;
 import org.apache.beam.runners.core.KeyedWorkItems;
 import org.apache.beam.runners.core.StateNamespace;
@@ -249,7 +250,7 @@ final class StatefulParDoEvaluatorFactory<K, InputT, OutputT> implements Transfo
         delegateEvaluator.processElement(windowedValue);
       }
 
-      Instant lastFired = null;
+      @Nullable Instant lastFired = null;
       for (TimerData timer : gbkResult.getValue().timersIterable()) {
         checkState(
             timer.getNamespace() instanceof WindowNamespace,
