@@ -45,6 +45,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import org.apache.beam.runners.core.StateNamespace;
@@ -66,6 +68,7 @@ import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ComparisonCh
 import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.HashBasedTable;
 import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableList;
 import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Iterables;
+import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Lists;
 import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Ordering;
 import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Sets;
 import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.SortedMultiset;
@@ -378,10 +381,12 @@ public class WatermarkManager<ExecutableT, CollectionT> {
         }
       }
 
-      // notify of TimerData update
-      Iterables.concat(
-              update.getCompletedTimers(), update.getDeletedTimers(), update.getSetTimers())
-          .forEach(timerUpdateNotification);
+      if (!update.isEmpty()) {
+        // notify of TimerData update
+        Iterables.concat(
+                update.getCompletedTimers(), update.getDeletedTimers(), update.getSetTimers())
+            .forEach(timerUpdateNotification);
+      }
     }
 
     @VisibleForTesting
@@ -863,7 +868,7 @@ public class WatermarkManager<ExecutableT, CollectionT> {
    * to consistency, we can have only single extracted set of timers that are being processed by
    * bundle processor at a time.
    */
-  private final Map<ExecutableT, Set<TimerData>> transformsWithAlreadyExtractedTimers =
+  private final Map<ExecutableT, Set<String>> transformsWithAlreadyExtractedTimers =
       new ConcurrentHashMap<>();
 
   /**
@@ -947,21 +952,23 @@ public class WatermarkManager<ExecutableT, CollectionT> {
   }
 
   private static <ExecutableT> Consumer<TimerData> timerUpdateConsumer(
-      Map<ExecutableT, Set<TimerData>> transformsWithAlreadyExtractedTimers,
+      Map<ExecutableT, Set<String>> transformsWithAlreadyExtractedTimers,
       ExecutableT executable) {
 
-    return update ->
-        transformsWithAlreadyExtractedTimers.compute(
-            executable,
-            (k, v) -> {
-              if (v != null) {
-                v.remove(update);
-                if (v.isEmpty()) {
-                  v = null;
-                }
+    return update -> {
+      String timerIdWithNs = TimerUpdate.getTimerIdWithNamespace(update);
+      transformsWithAlreadyExtractedTimers.compute(
+          executable,
+          (k, v) -> {
+            if (v != null) {
+              v.remove(timerIdWithNs);
+              if (v.isEmpty()) {
+                v = null;
               }
-              return v;
-            });
+            }
+            return v;
+          });
+    };
   }
 
   private Collection<Watermark> getInputProcessingWatermarks(ExecutableT executable) {
@@ -1219,7 +1226,8 @@ public class WatermarkManager<ExecutableT, CollectionT> {
                   if (v == null) {
                     v = new HashSet<>();
                   }
-                  v.addAll(newTimers);
+                  final Set<String> toUpdate = v;
+                  newTimers.forEach(td -> toUpdate.add(TimerUpdate.getTimerIdWithNamespace(td)));
                   return v;
                 });
             allTimers.addAll(firedTimers);
@@ -1480,19 +1488,24 @@ public class WatermarkManager<ExecutableT, CollectionT> {
    *
    * <p>setTimers and deletedTimers are collections of {@link TimerData} that have been added to the
    * {@link TimerInternals} of an executed step. completedTimers are timers that were delivered as
-   * the input to the executed step.
+   * the input to the executed step. pushedBackTimers are timers that were in completedTimers at the
+   * input, but were pushed back due to processing constraints.
    */
   public static class TimerUpdate {
     private final StructuralKey<?> key;
     private final Iterable<? extends TimerData> completedTimers;
-
     private final Iterable<? extends TimerData> setTimers;
     private final Iterable<? extends TimerData> deletedTimers;
+    private final Iterable<? extends TimerData> pushedBackTimers;
 
     /** Returns a TimerUpdate for a null key with no timers. */
     public static TimerUpdate empty() {
       return new TimerUpdate(
-          null, Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+          null,
+          Collections.emptyList(),
+          Collections.emptyList(),
+          Collections.emptyList(),
+          Collections.emptyList());
     }
 
     /**
@@ -1562,19 +1575,31 @@ public class WatermarkManager<ExecutableT, CollectionT> {
             key,
             ImmutableList.copyOf(completedTimers),
             ImmutableList.copyOf(setTimers),
-            ImmutableList.copyOf(deletedTimers));
+            ImmutableList.copyOf(deletedTimers),
+            Collections.emptyList());
       }
+    }
+
+    private static Map<String, TimerData> indexTimerData(Iterable<? extends TimerData> timerData) {
+      return StreamSupport.stream(timerData.spliterator(), false)
+          .collect(Collectors.toMap(TimerUpdate::getTimerIdWithNamespace, e -> e, (a, b) -> b));
+    }
+
+    private static String getTimerIdWithNamespace(TimerData td) {
+      return td.getNamespace() + td.getTimerId();
     }
 
     private TimerUpdate(
         StructuralKey<?> key,
         Iterable<? extends TimerData> completedTimers,
         Iterable<? extends TimerData> setTimers,
-        Iterable<? extends TimerData> deletedTimers) {
+        Iterable<? extends TimerData> deletedTimers,
+        Iterable<? extends TimerData> pushedBackTimers) {
       this.key = key;
       this.completedTimers = completedTimers;
       this.setTimers = setTimers;
       this.deletedTimers = deletedTimers;
+      this.pushedBackTimers = pushedBackTimers;
     }
 
     @VisibleForTesting
@@ -1597,30 +1622,45 @@ public class WatermarkManager<ExecutableT, CollectionT> {
       return deletedTimers;
     }
 
-    /**
-     * Returns a {@link TimerUpdate} that is like this one, but with the specified completed timers.
-     */
-    public TimerUpdate withCompletedTimers(Iterable<TimerData> completedTimers) {
-      return new TimerUpdate(this.key, completedTimers, setTimers, deletedTimers);
+    Iterable<? extends TimerData> getPushedBackTimers() {
+      return pushedBackTimers;
+    }
+
+    boolean isEmpty() {
+      return Iterables.isEmpty(completedTimers)
+          && Iterables.isEmpty(setTimers)
+          && Iterables.isEmpty(deletedTimers)
+          && Iterables.isEmpty(pushedBackTimers);
     }
 
     /**
-     * Returns a {@link TimerUpdate} that is like this one, but with the setTimers added by the
-     * provided setTimers, if those timers are not in deletedTimers. Moreover, setTimers are removed
-     * from completedTimers (if present).
+     * Returns a {@link TimerUpdate} that is like this one, but with the specified completed timers.
+     * Note that if any of the completed timers is in pushedBackTimers, then it is set instead. The
+     * pushedBackTimers are cleared afterwards.
      */
-    public TimerUpdate withPushedBackTimers(Iterable<TimerData> setTimers) {
-      Set<TimerData> deletedTimersSet = Sets.newHashSet(this.deletedTimers);
-      Set<TimerData> modifiableSetTimers = Sets.newHashSet(this.setTimers);
-      Set<TimerData> modifiableCompletedTimers = Sets.newHashSet(this.completedTimers);
-      for (TimerData t : setTimers) {
-        if (!deletedTimersSet.contains(t)) {
-          modifiableSetTimers.add(t);
-          modifiableCompletedTimers.remove(t);
+    public TimerUpdate withCompletedTimers(Iterable<TimerData> completedTimers) {
+      List<TimerData> timersToComplete = new ArrayList<>();
+      Set<TimerData> pushedBack = Sets.newHashSet(pushedBackTimers);
+      Map<String, TimerData> newSetTimers = indexTimerData(setTimers);
+      for (TimerData td : completedTimers) {
+        String timerIdWithNs = getTimerIdWithNamespace(td);
+        if (!pushedBack.contains(td)) {
+          timersToComplete.add(td);
+        } else if (!newSetTimers.containsKey(timerIdWithNs)) {
+          newSetTimers.put(timerIdWithNs, td);
         }
       }
       return new TimerUpdate(
-          this.key, modifiableCompletedTimers, modifiableSetTimers, deletedTimers);
+          key, timersToComplete, newSetTimers.values(), deletedTimers, Collections.emptyList());
+    }
+
+    /**
+     * Returns a {@link TimerUpdate} that is like this one, but with the pushedBackTimersare removed
+     * set by provided pushedBackTimers.
+     */
+    public TimerUpdate withPushedBackTimers(Iterable<TimerData> pushedBackTimers) {
+      return new TimerUpdate(
+          key, completedTimers, setTimers, deletedTimers, Lists.newArrayList(pushedBackTimers));
     }
 
     @Override
@@ -1650,6 +1690,8 @@ public class WatermarkManager<ExecutableT, CollectionT> {
           + completedTimers
           + ", deletedTimers="
           + deletedTimers
+          + ", pushedBackTimers="
+          + pushedBackTimers
           + ")";
     }
   }

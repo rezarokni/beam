@@ -685,7 +685,7 @@ public class DirectRunnerTest implements Serializable {
     run.waitUntilFinish();
   }
 
-  @Test(timeout = 10000)
+  @Test(timeout = 5000)
   public void testTwoTimersSettingEachOther() {
     Pipeline pipeline = getPipeline();
     Instant now = new Instant(1500000000000L);
@@ -769,7 +769,6 @@ public class DirectRunnerTest implements Serializable {
                     @OnTimer(timerName1)
                     public void onTimer1(
                         OnTimerContext context,
-                        @TimerId(timerName2) Timer t1,
                         @TimerId(timerName2) Timer t2,
                         @StateId(countStateName) ValueState<Integer> state) {
 
@@ -787,7 +786,6 @@ public class DirectRunnerTest implements Serializable {
                     public void onTimer2(
                         OnTimerContext context,
                         @TimerId(timerName1) Timer t1,
-                        @TimerId(timerName2) Timer t2,
                         @StateId(countStateName) ValueState<Integer> state) {
                       Integer current = state.read();
                       if (context.timestamp().isBefore(end)) {

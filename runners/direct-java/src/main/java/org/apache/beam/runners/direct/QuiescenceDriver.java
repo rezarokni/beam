@@ -23,7 +23,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Queue;
-import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -32,7 +31,6 @@ import org.apache.beam.runners.core.KeyedWorkItem;
 import org.apache.beam.runners.core.KeyedWorkItems;
 import org.apache.beam.runners.core.TimerInternals.TimerData;
 import org.apache.beam.runners.direct.WatermarkManager.FiredTimers;
-import org.apache.beam.runners.direct.WatermarkManager.TimerUpdate;
 import org.apache.beam.runners.local.ExecutionDriver;
 import org.apache.beam.runners.local.PipelineMessageReceiver;
 import org.apache.beam.sdk.runners.AppliedPTransform;
@@ -41,7 +39,6 @@ import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.PCollectionView;
 import org.apache.beam.vendor.guava.v20_0.com.google.common.base.Optional;
 import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Iterables;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Sets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -270,8 +267,7 @@ class QuiescenceDriver implements ExecutionDriver {
         CommittedBundle<?> inputBundle, TransformResult<?> result) {
 
       final CommittedResult<AppliedPTransform<?, ?, ?>> committedResult;
-      Iterable<TimerData> completedTimers = removePushedBackTimers(result.getTimerUpdate(), timers);
-      committedResult = evaluationContext.handleResult(inputBundle, completedTimers, result);
+      committedResult = evaluationContext.handleResult(inputBundle, timers, result);
       for (CommittedBundle<?> outputBundle : committedResult.getOutputs()) {
         pendingWork.offer(
             WorkUpdate.fromBundle(
@@ -310,16 +306,6 @@ class QuiescenceDriver implements ExecutionDriver {
     @Override
     public void handleError(Error err) {
       pipelineMessageReceiver.failed(err);
-    }
-
-    private Iterable<TimerData> removePushedBackTimers(
-        TimerUpdate timerUpdate, Iterable<TimerData> timers) {
-
-      Set<TimerData> modifiableCompletedTimers = Sets.newHashSet(timers);
-      for (TimerData td : timerUpdate.getSetTimers()) {
-        modifiableCompletedTimers.remove(td);
-      }
-      return modifiableCompletedTimers;
     }
   }
 
