@@ -23,12 +23,14 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import org.apache.beam.sdk.coders.AvroCoder;
+import org.apache.beam.sdk.coders.Coder;
 import org.apache.beam.sdk.coders.KvCoder;
 import org.apache.beam.sdk.coders.StringUtf8Coder;
 import org.apache.beam.sdk.extensions.timeseries.joins.BiTemporalTestUtils.QuoteData;
 import org.apache.beam.sdk.extensions.timeseries.joins.BiTemporalTestUtils.TradeData;
 import org.apache.beam.sdk.testing.PAssert;
 import org.apache.beam.sdk.testing.TestPipeline;
+import org.apache.beam.sdk.testing.TestStream;
 import org.apache.beam.sdk.transforms.*;
 import org.apache.beam.sdk.transforms.join.KeyedPCollectionTuple;
 import org.apache.beam.sdk.values.*;
@@ -78,12 +80,13 @@ public class BiTemporalFunctionalTests implements Serializable {
         BiTemporalTestUtils.createQuotesList(now, "FX_1", "Quote");
 
     PCollection<KV<String, QuoteData>> quotes =
-        p.apply("Create Quotes", Create.timestamped(rightStream))
-            .setCoder(KvCoder.of(StringUtf8Coder.of(), AvroCoder.of(QuoteData.class)));
+        p.apply(
+            "Create Quotes",
+            testStreamFrom(
+                rightStream, KvCoder.of(StringUtf8Coder.of(), AvroCoder.of(QuoteData.class))));
 
     PCollection<KV<String, TradeData>> trades =
-        p.apply("Create Trades", Create.timestamped(tradeStream))
-            .setCoder(AvroCoder.of(TradeData.class))
+        p.apply("Create Trades", testStreamFrom(tradeStream, AvroCoder.of(TradeData.class)))
             .apply("Trade Key", WithKeys.of("FX_1"));
 
     KeyedPCollectionTuple<String> kct =
@@ -124,12 +127,13 @@ public class BiTemporalFunctionalTests implements Serializable {
         BiTemporalTestUtils.createQuotesList(now, "FX_1", "Quote");
 
     PCollection<KV<String, QuoteData>> quotes =
-        p.apply("Create Quotes", Create.timestamped(rightStream))
-            .setCoder(KvCoder.of(StringUtf8Coder.of(), AvroCoder.of(QuoteData.class)));
+        p.apply(
+            "Create Quotes",
+            testStreamFrom(
+                rightStream, KvCoder.of(StringUtf8Coder.of(), AvroCoder.of(QuoteData.class))));
 
     PCollection<KV<String, TradeData>> trades =
-        p.apply("Create Trades", Create.timestamped(tradeStream))
-            .setCoder(AvroCoder.of(TradeData.class))
+        p.apply("Create Trades", testStreamFrom(tradeStream, AvroCoder.of(TradeData.class)))
             .apply("Trade Key", WithKeys.of("FX_1"));
 
     KeyedPCollectionTuple<String> kct =
@@ -161,12 +165,13 @@ public class BiTemporalFunctionalTests implements Serializable {
         BiTemporalTestUtils.createQuotesList(now, "FX_1", "Quote");
 
     PCollection<KV<String, QuoteData>> quotes =
-        p.apply("Create Quotes", Create.timestamped(rightStream))
-            .setCoder(KvCoder.of(StringUtf8Coder.of(), AvroCoder.of(QuoteData.class)));
+        p.apply(
+            "Create Quotes",
+            testStreamFrom(
+                rightStream, KvCoder.of(StringUtf8Coder.of(), AvroCoder.of(QuoteData.class))));
 
     PCollection<KV<String, TradeData>> trades =
-        p.apply("Create Trades", Create.timestamped(tradeStream))
-            .setCoder(AvroCoder.of(TradeData.class))
+        p.apply("Create Trades", testStreamFrom(tradeStream, AvroCoder.of(TradeData.class)))
             .apply("Trade Key", WithKeys.of("FX_1"));
 
     KeyedPCollectionTuple<String> kct =
@@ -237,12 +242,16 @@ public class BiTemporalFunctionalTests implements Serializable {
     rightStream.addAll(BiTemporalTestUtils.createQuotesList(now, "FX_2", "Quote"));
 
     PCollection<KV<String, QuoteData>> quotes =
-        p.apply("Create Quotes", Create.timestamped(rightStream))
-            .setCoder(KvCoder.of(StringUtf8Coder.of(), AvroCoder.of(QuoteData.class)));
+        p.apply(
+            "Create Quotes",
+            testStreamFrom(
+                rightStream, KvCoder.of(StringUtf8Coder.of(), AvroCoder.of(QuoteData.class))));
 
     PCollection<KV<String, TradeData>> trades =
-        p.apply("Create Trades", Create.timestamped(tradeStream))
-            .setCoder(KvCoder.of(StringUtf8Coder.of(), AvroCoder.of(TradeData.class)));
+        p.apply(
+            "Create Trades",
+            testStreamFrom(
+                tradeStream, KvCoder.of(StringUtf8Coder.of(), AvroCoder.of(TradeData.class))));
 
     KeyedPCollectionTuple<String> kct =
         KeyedPCollectionTuple.of(tradeTag, trades).and(quoteTag, quotes);
@@ -256,5 +265,19 @@ public class BiTemporalFunctionalTests implements Serializable {
     PAssert.that(stream.apply(new BiTemporalTestUtils.BiTemporalTest())).containsInAnyOrder(4);
 
     p.run();
+  }
+
+  @SuppressWarnings("unchecked")
+  private static <T> PTransform<PBegin, PCollection<T>> testStreamFrom(
+      List<TimestampedValue<T>> stream, Coder<T> coder) {
+
+    TestStream.Builder<T> builder = TestStream.create(coder);
+    if (!stream.isEmpty()) {
+      TimestampedValue[] rest = new TimestampedValue[stream.size() - 1];
+      TimestampedValue<T>[] restElems =
+          (TimestampedValue<T>[]) stream.subList(1, stream.size()).toArray(rest);
+      builder = builder.addElements(stream.get(0), restElems);
+    }
+    return builder.advanceWatermarkToInfinity();
   }
 }

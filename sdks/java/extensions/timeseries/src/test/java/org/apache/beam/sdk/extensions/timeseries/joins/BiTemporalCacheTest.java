@@ -18,11 +18,12 @@
 package org.apache.beam.sdk.extensions.timeseries.joins;
 
 import java.io.Serializable;
+import org.apache.beam.sdk.coders.VarIntCoder;
 import org.apache.beam.sdk.extensions.timeseries.joins.BiTemporalTestUtils.QuoteData;
 import org.apache.beam.sdk.extensions.timeseries.joins.BiTemporalTestUtils.TradeData;
 import org.apache.beam.sdk.testing.PAssert;
 import org.apache.beam.sdk.testing.TestPipeline;
-import org.apache.beam.sdk.transforms.Create;
+import org.apache.beam.sdk.testing.TestStream;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.transforms.Sum;
@@ -55,7 +56,9 @@ public class BiTemporalCacheTest implements Serializable {
 
     PCollection<KV<String, BiTemporalTestUtils.QuoteData>> quotes =
         // ----- Stream A
-        p.apply("Create Quotes", Create.of(1))
+        p.apply(
+                "Create Quotes",
+                TestStream.create(VarIntCoder.of()).addElements(1).advanceWatermarkToInfinity())
             .apply(
                 "Generate Quotes",
                 ParDo.of(
@@ -84,7 +87,7 @@ public class BiTemporalCacheTest implements Serializable {
                     }));
 
     PCollection<KV<String, TradeData>> trades =
-        p.apply("Create Trades", Create.of(1))
+        p.apply("Create Trades", TestStream.create(VarIntCoder.of()).addElements(1).advanceWatermarkToInfinity())
             .apply(
                 "Generate Trades",
                 ParDo.of(
