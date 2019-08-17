@@ -26,6 +26,7 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.annotation.Nullable;
 import org.apache.beam.runners.core.KeyedWorkItem;
 import org.apache.beam.runners.core.KeyedWorkItems;
 import org.apache.beam.runners.core.TimerInternals.TimerData;
@@ -65,7 +66,7 @@ class QuiescenceDriver implements ExecutionDriver {
   private final PipelineMessageReceiver pipelineMessageReceiver;
 
   private final CompletionCallback defaultCompletionCallback =
-      new TimerIterableCompletionCallback(Collections.emptyList());
+      new TimerIterableCompletionCallback(null, Collections.emptyList());
 
   private final Map<AppliedPTransform<?, ?, ?>, ConcurrentLinkedQueue<CommittedBundle<?>>>
       pendingRootBundles;
@@ -169,7 +170,9 @@ class QuiescenceDriver implements ExecutionDriver {
                 .commit(evaluationContext.now());
         outstandingWork.incrementAndGet();
         bundleProcessor.process(
-            bundle, transformTimers.getExecutable(), new TimerIterableCompletionCallback(delivery));
+            bundle,
+            transformTimers.getExecutable(),
+            new TimerIterableCompletionCallback(transformTimers.getExecutable(), delivery));
         state.set(ExecutorState.ACTIVE);
       }
     } catch (Exception e) {
@@ -249,17 +252,22 @@ class QuiescenceDriver implements ExecutionDriver {
    * Exception)}.
    */
   private class TimerIterableCompletionCallback implements CompletionCallback {
+
+    private final @Nullable AppliedPTransform<?, ?, ?> executable;
     private final Iterable<TimerData> timers;
 
-    TimerIterableCompletionCallback(Iterable<TimerData> timers) {
+    TimerIterableCompletionCallback(
+        @Nullable AppliedPTransform<?, ?, ?> executable, Iterable<TimerData> timers) {
+      this.executable = executable;
       this.timers = timers;
     }
 
     @Override
     public final CommittedResult handleResult(
         CommittedBundle<?> inputBundle, TransformResult<?> result) {
-      CommittedResult<AppliedPTransform<?, ?, ?>> committedResult =
-          evaluationContext.handleResult(inputBundle, timers, result);
+
+      final CommittedResult<AppliedPTransform<?, ?, ?>> committedResult;
+      committedResult = evaluationContext.handleResult(inputBundle, timers, result);
       for (CommittedBundle<?> outputBundle : committedResult.getOutputs()) {
         pendingWork.offer(
             WorkUpdate.fromBundle(
