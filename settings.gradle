@@ -93,6 +93,7 @@ include ":sdks:java:io:amqp"
 include ":sdks:java:io:cassandra"
 include ":sdks:java:io:clickhouse"
 include ":sdks:java:io:common"
+include ":sdks:java:io:contextual-text-io"
 include ":sdks:java:io:elasticsearch"
 include ":sdks:java:io:elasticsearch-tests:elasticsearch-tests-2"
 include ":sdks:java:io:elasticsearch-tests:elasticsearch-tests-5"
@@ -169,3 +170,5 @@ include "beam-test-infra-metrics"
 project(":beam-test-infra-metrics").dir = file(".test-infra/metrics")
 include "beam-test-tools"
 project(":beam-test-tools").dir = file(".test-infra/tools")
+
+
