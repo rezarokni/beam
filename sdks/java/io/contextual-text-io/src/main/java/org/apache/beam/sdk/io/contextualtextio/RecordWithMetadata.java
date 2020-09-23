@@ -53,7 +53,7 @@ public class RecordWithMetadata {
   public static final String VALUE = "value";
   public static final String RANGE_OFFSET = "rangeOffSet";
   public static final String RECORD_NUM_IN_OFFSET = "recordNumInOffset";
-  public static final String RESOURCE_ID = "resourceID";
+  public static final String RESOURCE_ID = "resourceId";
 
   public static Schema getSchema() {
     return Schema.builder()
