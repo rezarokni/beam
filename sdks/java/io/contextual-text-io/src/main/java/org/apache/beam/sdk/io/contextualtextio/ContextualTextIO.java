@@ -444,7 +444,7 @@ public class ContextualTextIO {
                 KV.of(
                     record
                         .getLogicalTypeValue(RecordWithMetadata.RESOURCE_ID, ResourceId.class)
-                        .getFilename(),
+                        .toString(),
                     record.getInt64(RecordWithMetadata.RANGE_OFFSET)),
                 record));
       }
