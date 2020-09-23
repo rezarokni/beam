@@ -170,7 +170,7 @@ public class ContextualTextIOTest {
       String resourceId =
           record
               .getLogicalTypeValue(RecordWithMetadata.RESOURCE_ID, ResourceId.class)
-              .getFilename();
+              .toString();
       String file = resourceId.substring(resourceId.lastIndexOf('/') + 1);
       out.output(
           file
