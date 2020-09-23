@@ -89,7 +89,7 @@ public class RecordWithMetadata {
 
     @Override
     public String getIdentifier() {
-      return "beam:logical_type:resourceIdRow:v1";
+      return "beam:logical_type:resource_id:v1";
     }
 
     @Override
