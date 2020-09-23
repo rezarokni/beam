@@ -829,7 +829,7 @@ public class ContextualTextIOTest {
                                   + " "
                                   + L.getLogicalTypeValue(
                                           RecordWithMetadata.RESOURCE_ID, ResourceId.class)
-                                      .getFilename()
+                                      .toString()
                                   + " "
                                   + L.getString(VALUE)));
 
