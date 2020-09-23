@@ -76,7 +76,7 @@ public class RecordWithMetadata {
 
     @Override
     public String getArgument() {
-      return "";
+      return null;
     }
 
     // The underlying schema used to represent rows.
