@@ -772,7 +772,7 @@ public class ContextualTextIOTest {
         out.output(
             record
                     .getLogicalTypeValue(RecordWithMetadata.RESOURCE_ID, ResourceId.class)
-                    .getFilename()
+                    .toString()
                 + " "
                 + record.getInt64(RecordWithMetadata.RECORD_NUM)
                 + " "
