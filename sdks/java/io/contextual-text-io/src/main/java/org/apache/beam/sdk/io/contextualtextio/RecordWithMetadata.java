@@ -93,7 +93,6 @@ public class RecordWithMetadata {
       return FieldType.row(schema);
     }
 
-    // Convert the representation type to the underlying Row type. Called by Beam when necessary.
     @Override
     public Row toBaseType(org.apache.beam.sdk.io.fs.ResourceId resourceId) {
       return Row.withSchema(schema)
