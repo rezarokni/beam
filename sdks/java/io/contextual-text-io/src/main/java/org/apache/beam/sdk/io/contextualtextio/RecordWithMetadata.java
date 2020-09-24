@@ -101,7 +101,6 @@ public class RecordWithMetadata {
           .build();
     }
 
-    // Convert the underlying Row type to an Instant. Called by Beam when necessary.
     @Override
     public ResourceId toInputType(Row base) {
       Preconditions.checkNotNull(base.getBoolean("isDirectory"));
