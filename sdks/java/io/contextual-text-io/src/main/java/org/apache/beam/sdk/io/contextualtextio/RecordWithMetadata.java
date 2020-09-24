@@ -103,10 +103,10 @@ public class RecordWithMetadata {
 
     @Override
     public ResourceId toInputType(Row base) {
-      Preconditions.checkNotNull(base.getBoolean("isDirectory"));
-      Preconditions.checkNotNull(base.getString("fileName"));
+      Preconditions.checkNotNull(base.getString("resource"));
+      Preconditions.checkNotNull(base.getBoolean("is_directory"));
       return FileSystems.matchNewResource(
-          base.getString("fileName"), base.getBoolean("isDirectory"));
+          base.getString("resource"), base.getBoolean("is_directory"));
     }
   }
 }
