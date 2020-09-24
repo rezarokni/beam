@@ -70,9 +70,6 @@ public class RecordWithMetadata {
   public static class ResourceIdRow implements LogicalType<ResourceId, Row> {
 
     @Override
-    public Schema.FieldType getArgumentType() {
-      return Schema.FieldType.STRING;
-    }
 
     @Override
     public String getArgument() {
