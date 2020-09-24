@@ -96,9 +96,8 @@ public class RecordWithMetadata {
     @Override
     public Row toBaseType(org.apache.beam.sdk.io.fs.ResourceId resourceId) {
       return Row.withSchema(schema)
-          .withFieldValue("schema", resourceId.getScheme())
-          .withFieldValue("fileName", resourceId.getFilename())
-          .withFieldValue("isDirectory", resourceId.isDirectory())
+          .withFieldValue("resource", resourceId.toString())
+          .withFieldValue("is_directory", resourceId.isDirectory())
           .build();
     }
 
