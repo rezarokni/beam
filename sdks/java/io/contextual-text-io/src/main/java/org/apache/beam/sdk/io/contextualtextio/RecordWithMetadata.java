@@ -79,9 +79,8 @@ public class RecordWithMetadata {
     // The underlying schema used to represent rows.
     private final Schema schema =
         Schema.builder()
-            .addStringField("schema")
-            .addStringField("fileName")
-            .addBooleanField("isDirectory")
+            .addStringField("resource")
+            .addBooleanField("is_directory")
             .build();
 
     @Override
